@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<project name="italm" default="init" basedir=".">
+    <property environment="env"/>
+    <property file="build.properties"/>
+
+
+	<target name="init">
+		<echo />
+	</target>
+    <target name="checkout">
+        <echo message="Checking out plugin from SVN to ${dir.svn}" />
+        <exec executable="svn" dir="${dir.svn}">
+            <arg line="co http://svn.wp-plugins.org/${build_name}" />
+        </exec>
+
+    </target>
+	<target name="devtest">
+		<echo message="Setting up dev environment.." />
+		<echo message="Copying to ${dir.dev}.." />
+		<copy todir="${dir.dev}">
+			<fileset dir="${dir.src}">
+			</fileset>
+		</copy>
+		<echo message="Setup complete, running.." />
+	</target>
+	<target name="build">
+		<echo message="Creating a new build.." />
+		<copy todir="${dir.build}/${build_name}">
+			<fileset dir="${dir.src}" excludes="preg_match_test.php">
+			</fileset>
+		</copy>
+		<zip destfile="${dir.build}/italm.zip">
+			<zipfileset dir="${dir.src}" prefix="${build_name}" excludes="preg_match_test.php" />
+		</zip>
+	</target>
+	<target name="svn-update">
+		<echo message="Updating....." />
+		<echo message="Copying to ${dir.svn}.." />
+		<copy todir="${dir.svn}">
+			<fileset dir="${dir.latest}">
+			</fileset>
+		</copy>
+	</target>
+</project>
