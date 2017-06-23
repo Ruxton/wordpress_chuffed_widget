@@ -50,31 +50,10 @@ class ChuffedWidget extends WP_Widget {
     $campaign_id = $instance['campaign_id'];
 
     if( ! empty($campaign_id) ) {
-      $transName = "chuffed-widget-$campaign_id";
-      $cacheTime = 30; // minutes
-      // delete_transient($transName);
-      if(false === ($chuffedData = get_transient($transName) ) ){
-        $json = wp_remote_get("http://chuffed.org/api/v1/campaign/$campaign_id");
+      $chuffedData = $this->getChuffedData($campaign_id);
 
-        // Check the response code
-      	$response_code    = wp_remote_retrieve_response_code( $json );
-      	$response_message = wp_remote_retrieve_response_message( $json );
-
-
-      	if ( 200 != $response_code && ! empty( $response_message ) ) {
-      		$err = $response_message;
-      	} elseif ( 200 != $response_code ) {
-      		$err = "Uknown err";
-      	} else {
-      		$chuffedData = wp_remote_retrieve_body( $json );
-        }
-
-        $chuffedData = json_decode($chuffedData, true);
-        set_transient($transName, $chuffedData, 60 * $cacheTime);
-      }
       $targetAmount = intval($chuffedData['data']['camp_amount']);
       $collectedAmount = intval($chuffedData['data']['camp_amount_collected']);
-      $percWidth = intval(($collectedAmount/$targetAmount)*100);
       $slug = $chuffedData['data']['slug'];
       $title = $chuffedData['data']['title'];
 
@@ -82,22 +61,8 @@ class ChuffedWidget extends WP_Widget {
       if ( ! empty( $instance['title'] ) ) {
         echo $args['before_title'] . apply_filters( 'widget_title', $instance['title'] ). $args['after_title'];
       }
-      ?>
-      <a style="text-decoration: none" href="https://chuffed.org/project/<?php echo $slug; ?>">
-        <div style="position:relative;">
-            <h1><?php echo $title; ?></h1>
-            <div style="width: 100%;height:15px;background-color: #F9F9F9 !important;">
-                <div style="width: <?php echo $percWidth;?>%; height: 15px;background-color: #28ab60 !important;"></div>
-            </div>
-            <h2 style="font-size: 50px;margin-bottom: 0;padding-bottom: 0;line-height: 56px;">
-                $<span><?php echo $collectedAmount; ?></span>
-            </h2>
-            <p style="color:#9b9b9b;"><?php echo __("Raised of", "text_domain"); ?>
-                $<span><?php echo $targetAmount; ?></span>
-            </p>
-        </div>
-      </a>
-      <?php
+
+      $this->renderChuffed($targetAmount,$collectedAmount,$slug,$title);
 
       echo $args['after_widget'];
     }
@@ -105,6 +70,54 @@ class ChuffedWidget extends WP_Widget {
       echo __("A Campaign ID is not set in the widgets setting", "text_domain");
     }
 	}
+
+  public function getChuffedData($campaign_id) {
+    $transName = "chuffed-widget-$campaign_id";
+    $cacheTime = 30; // minutes
+    delete_transient($transName);
+    if(false === ($chuffedData = get_transient($transName) ) ){
+      $json = wp_remote_get("https://chuffed.org/api/v1/campaign/$campaign_id");
+
+      // Check the    response code
+      $response_code    = wp_remote_retrieve_response_code( $json );
+      $response_message = wp_remote_retrieve_response_message( $json );
+      // phpinfo();
+      // var_dump($json);exit;
+
+      if ( 200 != $response_code && ! empty( $response_message ) ) {
+        $err = $response_message;
+      } elseif ( 200 != $response_code ) {
+        $err = "Uknown err";
+      } else {
+        $chuffedData = wp_remote_retrieve_body( $json );
+      }
+
+      $chuffedData = json_decode($chuffedData, true);
+      set_transient($transName, $chuffedData, 60 * $cacheTime);
+    }
+
+    return $chuffedData;
+  }
+
+  public function renderChuffed($targetAmount,$collectedAmount,$slug,$title) {
+    $percWidth = intval(($collectedAmount/$targetAmount)*100);
+    ?>
+    <a style="text-decoration: none" href="https://chuffed.org/project/<?php echo $slug; ?>">
+      <div style="position:relative;">
+          <h1><?php echo $title; ?></h1>
+          <div style="width: 100%;height:15px;background-color: #F9F9F9 !important;">
+              <div style="width: <?php echo $percWidth;?>%; height: 15px;background-color: #28ab60 !important;"></div>
+          </div>
+          <h2 style="font-size: 50px;margin-bottom: 0;padding-bottom: 0;line-height: 56px;">
+              $<span><?php echo $collectedAmount; ?></span>
+          </h2>
+          <p style="color:#9b9b9b;"><?php echo __("Raised of", "text_domain"); ?>
+              $<span><?php echo $targetAmount; ?></span>
+          </p>
+      </div>
+    </a>
+    <?php
+  }
 
 	/**
 	 * Back-end widget form.
@@ -150,4 +163,24 @@ class ChuffedWidget extends WP_Widget {
 function register_chuffed_widget() {
     register_widget( 'ChuffedWidget' );
 }
+
+function chuffed_shortcode($attributes) {
+  $chuffed_widget = new ChuffedWidget();
+
+  $shortcodeData = shortcode_atts( array(
+    'campaign_id' => '',
+  ), $attributes );
+  if( ! empty($shortcodeData['campaign_id']) ) {
+    $chuffedData = $chuffed_widget->getChuffedData($shortcodeData['campaign_id']);
+
+    $targetAmount = intval($chuffedData['data']['camp_amount']);
+    $collectedAmount = intval($chuffedData['data']['camp_amount_collected']);
+    $slug = $chuffedData['data']['slug'];
+    $title = $chuffedData['data']['title'];
+
+    $chuffed_widget->renderChuffed($targetAmount,$collectedAmount,$slug,$title);
+  }
+}
+
 add_action( 'widgets_init', 'register_chuffed_widget' );
+add_shortcode( 'chuffed', 'chuffed_shortcode' );
