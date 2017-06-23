@@ -4,7 +4,7 @@ Donate link: http://ignite.digitalignition.net/
 Tags: chuffed, donations, widget
 Requires at least: 4.3.0
 Tested up to: 4.8.0
-Stable tag: 0.2
+Stable tag: 0.2.1
 
 The plugin will add a widget to your WordPress install to display Chuffed campaigns.
 

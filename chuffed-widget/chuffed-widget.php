@@ -5,7 +5,7 @@ Plugin URI:   http://ignite.digitalignition.net/articlesexamples/chuffed-donatio
 Description:  Easily add a widget for your chuffed campaign
 Author:       Greg Tangey
 Author URI:   http://ignite.digitalignition.net/
-Version:      0.2
+Version:      0.2.1
 */
 
 /*  Copyright 2015  Greg Tangey  (email : greg@digitalignition.net)
@@ -149,11 +149,16 @@ class ChuffedWidget extends WP_Widget {
     return $chuffedData;
   }
 
-  public function renderChuffed($targetAmount,$collectedAmount,$slug,$title) {
+  public function renderChuffed($targetAmount,$collectedAmount,$slug,$title,$is_widget=true) {
     $percWidth = intval(($collectedAmount/$targetAmount)*100);
+    if($is_widget) {
+      $positon = "position: relative;";
+    } else {
+      $position = "";
+    }
     ?>
     <a style="text-decoration: none" href="https://chuffed.org/project/<?php echo $slug; ?>">
-      <div style="position:relative;">
+      <div style="<?php echo $position; ?>">
           <h1><?php echo $title; ?></h1>
           <div style="width: 100%;height:15px;background-color: #F9F9F9 !important;">
               <div style="width: <?php echo $percWidth;?>%; height: 15px;background-color: #28ab60 !important;"></div>
@@ -238,7 +243,7 @@ function chuffed_shortcode($attributes) {
     $slug = $chuffedData['data']['slug'];
     $title = $chuffedData['data']['title'];
 
-    $chuffed_widget->renderChuffed($targetAmount,$collectedAmount,$slug,$title);
+    $chuffed_widget->renderChuffed($targetAmount,$collectedAmount,$slug,$title,false);
   }
 }
 
