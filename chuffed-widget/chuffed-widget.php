@@ -5,7 +5,7 @@ Plugin URI:   http://ignite.digitalignition.net/articlesexamples/chuffed-donatio
 Description:  Easily add a widget for your chuffed campaign
 Author:       Greg Tangey
 Author URI:   http://ignite.digitalignition.net/
-Version:      0.1
+Version:      0.2
 */
 
 /*  Copyright 2015  Greg Tangey  (email : greg@digitalignition.net)
@@ -26,6 +26,8 @@ Version:      0.1
 */
 
 class ChuffedWidget extends WP_Widget {
+
+  const USER_AGENT = "WordPress Chuffed Widget v0.2";
 
 	/**
 	 * Register widget with WordPress.
@@ -48,10 +50,15 @@ class ChuffedWidget extends WP_Widget {
 	 */
 	public function widget( $args, $instance ) {
     $campaign_id = $instance['campaign_id'];
+    $campaign_slug = $instance['slug'];
 
-    if( ! empty($campaign_id) ) {
+    if( ! empty($campaign_id) || !empty($campaign_slug)) {
+
+      if( empty($campaign_id)) {
+        $campaign_id = $this->getCampaignIdFromSlug($campaign_slug);
+      }
+
       $chuffedData = $this->getChuffedData($campaign_id);
-
       $targetAmount = intval($chuffedData['data']['camp_amount']);
       $collectedAmount = intval($chuffedData['data']['camp_amount_collected']);
       $slug = $chuffedData['data']['slug'];
@@ -71,12 +78,55 @@ class ChuffedWidget extends WP_Widget {
     }
 	}
 
+  public function getCampaignIdFromSlug($slug) {
+    $transName = "chuffed-widget-slug-lookup-$slug";
+    $cacheTime = 60; // minutes
+
+    delete_transient($transName);
+
+    if( false == ($campaignId = get_transient($transName))) {
+      $get_args = array(
+        'user-agent' => self::USER_AGENT,
+      );
+
+      $html = wp_remote_get("https://chuffed.org/project/$slug",$get_args);
+
+      $response_code    = wp_remote_retrieve_response_code( $html );
+      $response_message = wp_remote_retrieve_response_message( $html );
+
+
+      if ( 200 != $response_code && ! empty( $response_message ) ) {
+        $err = $response_message;
+      } elseif ( 200 != $response_code ) {
+        $err = "Uknown err";
+      } else {
+        $chuffedData = wp_remote_retrieve_body( $html );
+
+        $doc = new DOMDocument;
+        @$doc->loadHTML($chuffedData);
+
+        $xp  = new DOMXPath($doc);
+        $tag = $xp->query("//iframe[(contains(@src, '/iframe/'))]");
+
+        if(sizeof($tag)==1) {
+          $url = explode("/",$tag[0]->attributes->getNamedItem('src')->value);
+          $campaignId = $url[2];
+          set_transient($transName, $campaignId, 60 * $cacheTime);
+        }
+      }
+    }
+    return $campaignId;
+  }
+
   public function getChuffedData($campaign_id) {
     $transName = "chuffed-widget-$campaign_id";
     $cacheTime = 30; // minutes
     delete_transient($transName);
     if(false === ($chuffedData = get_transient($transName) ) ){
-      $json = wp_remote_get("https://chuffed.org/api/v1/campaign/$campaign_id");
+      $get_args = array(
+        'user-agent' => self::USER_AGENT
+      );
+      $json = wp_remote_get("https://chuffed.org/api/v1/campaign/$campaign_id",$get_args);
 
       // Check the    response code
       $response_code    = wp_remote_retrieve_response_code( $json );
@@ -129,6 +179,7 @@ class ChuffedWidget extends WP_Widget {
 	public function form( $instance ) {
     $title = ! empty( $instance['title'] ) ? $instance['title'] : __( 'Chuffed Campaign', 'text_domain' );
     $campaign_id = ! empty( $instance['campaign_id'] ) ? $instance['campaign_id'] : '';
+    $slug = ! empty( $instance['slug'] ) ? $instance['slug'] : '';
 
 		?>
 		<p>
@@ -136,6 +187,8 @@ class ChuffedWidget extends WP_Widget {
     <input class="widefat" id="<?php echo $this->get_field_id( 'title' ); ?>" name="<?php echo $this->get_field_name( 'title' ); ?>" type="text" value="<?php echo esc_attr( $title ); ?>">
 		<label for="<?php echo $this->get_field_id( 'campaign_id' ); ?>"><?php _e( 'Campaign ID:' ); ?></label>
 		<input class="widefat" id="<?php echo $this->get_field_id( 'campaign_id' ); ?>" name="<?php echo $this->get_field_name( 'campaign_id' ); ?>" type="text" value="<?php echo esc_attr( $campaign_id ); ?>">
+    <label for="<?php echo $this->get_field_id( 'slug' ); ?>"><?php _e( 'Campaign Slug:' ); ?></label>
+    <input class="widefat" id="<?php echo $this->get_field_id( 'slug' ); ?>" name="<?php echo $this->get_field_name( 'slug' ); ?>" type="text" value="<?php echo esc_attr( $slug ); ?>">
 		</p>
 		<?php
 	}
@@ -153,6 +206,7 @@ class ChuffedWidget extends WP_Widget {
 	public function update( $new_instance, $old_instance ) {
 		$instance = array();
 		$instance['campaign_id'] = ( ! empty( $new_instance['campaign_id'] ) ) ? strip_tags( $new_instance['campaign_id'] ) : '';
+    $instance['slug'] = ( ! empty( $new_instance['slug'] ) ) ? strip_tags( $new_instance['slug'] ) : '';
     $instance['title'] = ( ! empty( $new_instance['title'] ) ) ? strip_tags( $new_instance['title'] ) : '';
 
 		return $instance;
@@ -169,10 +223,16 @@ function chuffed_shortcode($attributes) {
 
   $shortcodeData = shortcode_atts( array(
     'campaign_id' => '',
+    'slug' => ''
   ), $attributes );
-  if( ! empty($shortcodeData['campaign_id']) ) {
-    $chuffedData = $chuffed_widget->getChuffedData($shortcodeData['campaign_id']);
 
+  if( ! empty($shortcodeData['campaign_id']) || !empty($shortcodeData['slug'])) {
+    if( empty($shortcodeData['campaign_id'])) {
+      $campaign_id = $chuffed_widget->getCampaignIdFromSlug($shortcodeData['slug']);
+    } else {
+      $campaign_id = $shortcodeData['campaign_id'];
+    }
+    $chuffedData = $chuffed_widget->getChuffedData($campaign_id);
     $targetAmount = intval($chuffedData['data']['camp_amount']);
     $collectedAmount = intval($chuffedData['data']['camp_amount_collected']);
     $slug = $chuffedData['data']['slug'];
